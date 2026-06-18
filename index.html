@@ -494,7 +494,7 @@ label.field-label{
     <div id="branchstrip"></div>
 
     <!-- RIGHT PANEL -->
-    <div id="panel">
+    <div id="panel" class="closed">
       <div class="panel-tabs" id="panelTabs">
         <div class="panel-tab active" data-tab="scene" onclick="showPanel('scene')">Scene</div>
         <div class="panel-tab" data-tab="branch" onclick="showPanel('branch')">Branches</div>
@@ -707,12 +707,14 @@ function setMode(m){
 }
 
 function showPanel(tab){
+  const panel=document.getElementById('panel');
+  const isOpen=!panel.classList.contains('closed');
+  if(isOpen&&currentPanel===tab){ panel.classList.add('closed'); document.querySelectorAll('.sidebar-icon[id^="sib-"]').forEach(el=>el.classList.remove('active')); return; }
   currentPanel=tab;
   document.querySelectorAll('.panel-tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===tab));
   document.querySelectorAll('.sidebar-icon[id^="sib-"]').forEach(el=>el.classList.remove('active'));
   const sib=document.getElementById('sib-'+tab);
   if(sib) sib.classList.add('active');
-  const panel=document.getElementById('panel');
   panel.classList.remove('closed');
   renderPanelContent();
 }
