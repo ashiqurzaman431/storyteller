@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#363a4a">
+<meta name="description" content="A visual story canvas for plotting scenes, branches, and storylines.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="StoryTeller">
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<title>StoryTeller</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  /* 40% dark + 15% brighter = charcoal with breathing room */
+  --bg:       #363a4a;
+  --surface:  #3f4356;
+  --surface2: #474b5e;
+  --surface3: #3a3e50;
+  --surface4: #313444;
+
+  --border:  rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.13);
+
+  --ink:  #eceef8;
+  --ink2: #9ca0bc;
+  --ink3: #666a84;
+
+  --mono: 'JetBrains Mono', monospace;
+  --sans: 'Inter', sans-serif;
+
+  --main:   #8aabff;
+  --main-g: rgba(138,171,255,0.12);
+  --main-b: rgba(138,171,255,0.28);
+
+  --danger: #f07888;
+  --good:   #52d49a;
+
+  --sidebar-w: 52px;
+  --panel-w: 300px;
+}
+
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;background:var(--bg);}
+body{font-family:var(--sans);color:var(--ink);}
+button{font:inherit;background:none;border:none;cursor:pointer;color:inherit;}
+input,textarea,select{
+  font-family:var(--mono); font-size:11.5px;
+  background:var(--surface4); border:1px solid var(--border2);
+  color:var(--ink); border-radius:5px; padding:7px 9px;
+  width:100%; outline:none; transition:border-color .15s;
+}
+input:focus,textarea:focus,select:focus{
+  border-color:var(--main); box-shadow:0 0 0 3px var(--main-g);
+}
+textarea{resize:vertical;font-family:var(--sans);font-size:12px;line-height:1.55;min-height:60px;}
+
+/* ── LAYOUT ROOT ── */
+#app{ display:flex; height:100%; }
+
+/* ── LEFT SIDEBAR — icon rail ── */
+#sidebar{
+  width:var(--sidebar-w); background:var(--surface4);
+  border-right:1px solid var(--border);
+  display:flex; flex-direction:column; align-items:center;
+  padding:12px 0; gap:2px; flex-shrink:0; z-index:40;
+}
+.sidebar-logo{
+  font-family:var(--mono); font-size:15px; color:var(--main);
+  padding:6px; margin-bottom:10px; cursor:default; user-select:none;
+}
+.sidebar-icon{
+  width:36px; height:36px; border-radius:8px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:16px; cursor:pointer; transition:background .12s, color .12s;
+  color:var(--ink3); position:relative;
+}
+.sidebar-icon:hover{ background:var(--surface2); color:var(--ink); }
+.sidebar-icon.active{ background:var(--main-g); color:var(--main); }
+.sidebar-icon.mode-active{ background:rgba(138,171,255,0.18); color:var(--main); }
+.sidebar-sep{
+  width:24px; height:1px; background:var(--border2); margin:6px 0;
+}
+.sidebar-icon .badge{
+  position:absolute; top:3px; right:3px;
+  width:7px; height:7px; border-radius:50%;
+  background:var(--main); border:1px solid var(--surface4);
+}
+
+/* ── CANVAS AREA ── */
+#canvasArea{ flex:1; position:relative; overflow:hidden; }
+.canvas-outer{ width:100%; height:100%; overflow:auto; }
+.canvas-content{
+  position:relative; min-width:2800px; min-height:2000px;
+  background-image:
+    radial-gradient(rgba(255,255,255,0.045) 1px, transparent 1px);
+  background-size:26px 26px;
+}
+.lines-svg{ position:absolute; top:0; left:0; pointer-events:none; overflow:visible; }
+
+/* ── FLOATING PANEL (right) ── */
+#panel{
+  position:absolute; top:0; right:0; bottom:0;
+  width:var(--panel-w);
+  background:var(--surface4);
+  border-left:1px solid var(--border);
+  display:flex; flex-direction:column;
+  z-index:30; transition:transform .2s ease;
+  overflow:hidden;
+}
+#panel.closed{ transform:translateX(100%); }
+
+.panel-tabs{
+  display:flex; border-bottom:1px solid var(--border);
+  flex-shrink:0;
+}
+.panel-tab{
+  flex:1; padding:11px 0; font-family:var(--mono); font-size:9.5px;
+  font-weight:700; text-transform:uppercase; letter-spacing:0.6px;
+  color:var(--ink3); cursor:pointer; text-align:center;
+  transition:color .12s; border-bottom:2px solid transparent;
+  margin-bottom:-1px;
+}
+.panel-tab:hover{ color:var(--ink2); }
+.panel-tab.active{ color:var(--main); border-bottom-color:var(--main); }
+
+.panel-body{ flex:1; overflow-y:auto; }
+.panel-section{ padding:16px; border-bottom:1px solid var(--border); }
+.panel-section:last-child{ border-bottom:none; }
+
+.p-label{
+  font-family:var(--mono); font-size:10px; font-weight:700;
+  text-transform:uppercase; letter-spacing:0.6px; color:var(--ink2);
+  margin-bottom:5px; display:block;
+}
+.p-hint{ font-family:var(--sans); font-size:11.5px; color:var(--ink3); line-height:1.55; }
+.p-sub{ font-family:var(--mono); font-size:10px; color:var(--ink2); margin-bottom:10px; }
+
+/* field rows */
+.field{ margin-bottom:10px; }
+.field:last-child{ margin-bottom:0; }
+label.field-label{
+  display:block; font-family:var(--mono); font-size:9px; font-weight:700;
+  text-transform:uppercase; letter-spacing:0.6px; color:var(--ink3);
+  margin-bottom:4px;
+}
+
+/* action links — text only, no boxes */
+.action{
+  display:inline-flex; align-items:center; gap:5px;
+  font-family:var(--mono); font-size:10.5px; font-weight:600;
+  color:var(--ink2); cursor:pointer; padding:5px 0;
+  transition:color .12s; border:none; background:none;
+}
+.action:hover{ color:var(--ink); }
+.action.primary{ color:var(--main); }
+.action.primary:hover{ color:#b0c8ff; }
+.action.danger{ color:var(--ink3); }
+.action.danger:hover{ color:var(--danger); }
+
+.action-row{ display:flex; flex-wrap:wrap; gap:14px; margin-top:8px; }
+.action-col{ display:flex; flex-direction:column; gap:2px; }
+
+/* picks */
+.pick-item{
+  display:flex; align-items:center; gap:8px;
+  padding:6px 0; border-bottom:1px solid var(--border);
+  font-family:var(--mono); font-size:10.5px;
+}
+.pick-item:last-child{ border-bottom:none; }
+.pick-num{
+  width:16px; height:16px; border-radius:50%;
+  background:var(--main); color:var(--bg);
+  font-size:8px; font-weight:800;
+  display:flex; align-items:center; justify-content:center; flex-shrink:0;
+}
+.pick-lbl{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink2); }
+.pick-rm{ color:var(--ink3); cursor:pointer; font-size:13px; line-height:1; }
+.pick-rm:hover{ color:var(--danger); }
+
+/* branch tree */
+.b-row{
+  display:flex; align-items:center; gap:7px;
+  padding:5px 0; font-family:var(--mono); font-size:10px; cursor:pointer;
+}
+.b-dot{ width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+.b-label{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink2); }
+.b-row:hover .b-label{ color:var(--ink); }
+.b-eye{ font-size:11px; opacity:0.5; cursor:pointer; }
+.b-eye:hover{ opacity:1; }
+.b-del{ font-size:11px; color:var(--ink3); cursor:pointer; opacity:0.4; }
+.b-del:hover{ color:var(--danger); opacity:1; }
+
+/* storyline item */
+.sl-row{
+  display:flex; align-items:center; gap:8px;
+  padding:6px 0; border-bottom:1px solid var(--border);
+  font-family:var(--mono); font-size:10px;
+}
+.sl-row:last-child{ border-bottom:none; }
+.sl-bar{ width:12px; height:2px; border-radius:2px; background:var(--main); flex-shrink:0; }
+.sl-name{ flex:1; color:var(--ink2); }
+.sl-count{ color:var(--ink3); font-size:9px; }
+
+/* inline form (fork) */
+.inline-form{ padding-top:10px; margin-top:8px; border-top:1px solid var(--border2); display:flex; flex-direction:column; gap:8px; }
+
+/* ── FLOATING MODE BAR — bottom center ── */
+#modebar{
+  position:fixed; bottom:22px; left:50%; transform:translateX(-50%);
+  background:var(--surface); border:1px solid var(--border2);
+  border-radius:12px; padding:5px 6px;
+  display:flex; align-items:center; gap:1px;
+  z-index:50; box-shadow:0 8px 32px rgba(0,0,0,0.4);
+  transition:opacity .2s;
+}
+.mb-item{
+  font-family:var(--mono); font-size:10px; font-weight:600;
+  color:var(--ink3); padding:6px 14px; border-radius:8px;
+  cursor:pointer; white-space:nowrap; transition:background .12s, color .12s;
+  letter-spacing:0.2px;
+}
+.mb-item:hover{ background:var(--surface2); color:var(--ink); }
+.mb-item.active{ background:var(--main-g); color:var(--main); }
+.mb-item.done{ color:var(--main); }
+.mb-item.danger:hover{ color:var(--danger); }
+.mb-sep{ width:1px; height:18px; background:var(--border2); margin:0 2px; flex-shrink:0; }
+
+/* ── BRANCH STRIP — floating top ── */
+#branchstrip{
+  position:fixed; top:10px; left:calc(var(--sidebar-w) + 12px); right:12px;
+  display:flex; align-items:center; gap:5px; flex-wrap:wrap;
+  z-index:35; pointer-events:none;
+}
+.bs-chip{
+  font-family:var(--mono); font-size:9.5px; font-weight:600;
+  padding:4px 10px 4px 8px;
+  background:var(--surface); border:1px solid var(--border2);
+  border-radius:4px; color:var(--ink2);
+  display:inline-flex; align-items:center; gap:5px;
+  cursor:pointer; white-space:nowrap;
+  transition:color .12s, opacity .12s;
+  pointer-events:all;
+}
+.bs-chip:hover{ color:var(--ink); }
+.bs-chip.faded{ opacity:0.3; }
+.bs-chip .bs-dot{ width:5px; height:5px; border-radius:50%; flex-shrink:0; }
+
+/* ── SCENE CARDS ── */
+.scene-wrap{
+  position:absolute; width:clamp(260px, 30vw, 360px);
+  cursor:grab; user-select:none; z-index:2;
+}
+.scene-wrap.dragging{ cursor:grabbing; z-index:10; opacity:0.88; }
+.scene-wrap.dimmed{ opacity:0.08; pointer-events:none; }
+
+.scene-card{
+  border-radius:9px;
+  background:var(--surface);
+  border:1px solid var(--border2);
+  overflow:hidden; position:relative;
+  transition:border-color .15s, box-shadow .15s;
+  box-shadow:0 3px 14px rgba(0,0,0,0.3);
+}
+/* left accent stripe */
+.scene-card::before{
+  content:''; position:absolute; left:0; top:0; bottom:0; width:3px;
+  background:var(--accent, var(--main));
+}
+.scene-wrap:hover .scene-card{
+  border-color:rgba(138,171,255,0.3);
+  box-shadow:0 6px 24px rgba(0,0,0,0.42);
+}
+.scene-card.selected{
+  border-color:var(--accent, var(--main));
+  box-shadow:0 0 0 2px color-mix(in srgb, var(--accent,var(--main)) 30%, transparent);
+}
+.scene-card.picked{
+  border-color:var(--main);
+  box-shadow:0 0 0 2px var(--main-b);
+}
+.pick-badge{
+  position:absolute; top:-7px; right:-7px;
+  width:18px; height:18px; border-radius:50%;
+  background:var(--main); color:var(--bg);
+  font-family:var(--mono); font-size:9px; font-weight:800;
+  display:flex; align-items:center; justify-content:center;
+  z-index:6; box-shadow:0 2px 8px rgba(0,0,0,0.45);
+}
+
+.card-head{
+  padding:10px 10px 8px 13px;
+  display:flex; align-items:flex-start; gap:6px;
+}
+.card-meta{ flex:1; min-width:0; }
+.card-num{
+  font-family:var(--mono); font-size:10px; font-weight:700;
+  color:var(--accent, var(--ink2)); text-transform:uppercase;
+  letter-spacing:0.4px; margin-bottom:2px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.card-title{
+  font-size:14px; font-weight:700; color:var(--ink);
+  line-height:1.35;
+}
+.card-toggle{
+  font-size:9px; color:var(--ink3); cursor:pointer;
+  padding:2px; flex-shrink:0; transition:color .12s; line-height:1;
+  background:none; border:none;
+}
+.card-toggle:hover{ color:var(--ink2); }
+
+.card-body{
+  padding:0 12px 10px 13px;
+  border-top:1px solid var(--border);
+  overflow:hidden; transition:max-height .5s ease, opacity .16s ease;
+  max-height:4000px; opacity:1;
+}
+.card-body.collapsed{
+  max-height:0; opacity:0;
+  border-top-color:transparent; padding-top:0; padding-bottom:0;
+}
+.card-desc{
+  font-size:12px; color:var(--ink); line-height:1.6; padding-top:7px;
+  opacity:0.82;
+}
+.card-time{
+  font-family:var(--mono); font-size:9px; color:var(--ink2);
+  margin-top:6px;
+}
+.badge-row{ display:flex; flex-wrap:wrap; gap:4px; margin-top:7px; }
+.s-badge{
+  font-family:var(--mono); font-size:9.5px; font-weight:700;
+  padding:3px 8px; border-radius:3px; white-space:nowrap;
+}
+.s-badge.fork{ background:var(--surface3); color:var(--ink2); border:1px solid var(--border2); }
+.s-badge.merge{ background:var(--main-g); color:var(--main); border:1px solid var(--main-b); }
+.s-badge.story{ background:var(--main); color:var(--bg); }
+
+/* ── MODAL ── */
+.modal-overlay{
+  position:fixed; inset:0; background:rgba(0,0,0,0.6);
+  display:flex; align-items:center; justify-content:center; z-index:60;
+}
+.modal-overlay.hidden{ display:none; }
+.modal-box{
+  width:500px; max-height:80vh; overflow-y:auto;
+  background:var(--surface); border:1px solid var(--border2);
+  border-radius:11px; padding:26px 28px;
+}
+.modal-box h2{ font-family:var(--mono); font-size:13px; font-weight:700; margin-bottom:14px; }
+.modal-box h3{ font-family:var(--mono); font-size:10px; color:var(--main); margin:16px 0 5px; text-transform:uppercase; letter-spacing:0.5px; }
+.modal-box p{ font-size:12px; color:var(--ink2); line-height:1.65; margin-bottom:8px; }
+
+/* ── TOAST ── */
+.toast{
+  position:fixed; bottom:72px; left:50%; transform:translateX(-50%);
+  background:var(--surface2); border:1px solid var(--border2);
+  color:var(--ink2); font-family:var(--mono); font-size:10.5px;
+  padding:7px 15px; border-radius:6px; z-index:70;
+  opacity:0; transition:opacity .2s; pointer-events:none;
+}
+.toast.show{ opacity:1; }
+
+/* ── CANVAS TITLE WATERMARK ── */
+#canvasTitle{
+  position:fixed;
+  top:0;
+  left:calc(var(--sidebar-w) + 10px);
+  right:0;
+  pointer-events:none;
+  z-index:1;
+  padding:18px 28px 0 20px;
+  font-family:var(--mono);
+  font-size:clamp(36px, 7vw, 96px);
+  font-weight:700;
+  color:rgba(255,255,255,0.04);
+  letter-spacing:-1px;
+  line-height:1;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:clip;
+  user-select:none;
+}
+
+/* ── SETTINGS PANEL ── */
+.settings-section{ padding:20px 16px; border-bottom:1px solid var(--border); }
+.settings-section:last-child{ border-bottom:none; }
+.settings-title{
+  font-family:var(--mono); font-size:10px; font-weight:700;
+  text-transform:uppercase; letter-spacing:0.6px; color:var(--ink2);
+  margin-bottom:14px; display:block;
+}
+.settings-hint{ font-size:11.5px; color:var(--ink3); line-height:1.6; margin-top:8px; }
+
+/* ── WRITER OVERLAY ── */
+#writerOverlay{
+  position:fixed; inset:0; z-index:80;
+  background:rgba(30,32,42,0.97);
+  display:flex; flex-direction:column;
+  opacity:0; pointer-events:none;
+  transition:opacity .2s ease;
+}
+#writerOverlay.open{
+  opacity:1; pointer-events:all;
+}
+#writerHeader{
+  display:flex; align-items:baseline; justify-content:space-between;
+  padding:28px 48px 0;
+  flex-shrink:0;
+}
+#writerSceneLabel{
+  font-family:var(--mono); font-size:10px; font-weight:700;
+  text-transform:uppercase; letter-spacing:0.6px; color:var(--main);
+}
+#writerSceneTitle{
+  font-family:var(--sans); font-size:22px; font-weight:600; color:var(--ink);
+  margin-top:6px; padding:28px 48px 0;
+  flex-shrink:0;
+}
+#writerMeta{
+  display:flex; align-items:center; gap:16px;
+  padding:0 48px;
+  flex-shrink:0;
+  margin-top:10px;
+}
+#writerWordCount{
+  font-family:var(--mono); font-size:10px; color:var(--ink3);
+}
+#writerClose{
+  font-family:var(--mono); font-size:10px; font-weight:600;
+  color:var(--ink3); cursor:pointer; padding:4px 10px;
+  border:1px solid var(--border2); border-radius:5px;
+  transition:color .12s, border-color .12s; margin-left:auto;
+}
+#writerClose:hover{ color:var(--ink); border-color:var(--ink2); }
+#writerTextarea{
+  flex:1; margin:20px 48px 32px;
+  background:transparent; border:none;
+  font-family:var(--sans); font-size:15px; line-height:1.85;
+  color:var(--ink); resize:none;
+  caret-color:var(--main);
+  width:calc(100% - 96px);
+  max-width:720px; align-self:center;
+  box-shadow:none;
+}
+#writerTextarea:focus{
+  border:none; box-shadow:none; outline:none;
+}
+
+/* scrollbar */
+::-webkit-scrollbar{ width:5px; height:5px; }
+::-webkit-scrollbar-track{ background:transparent; }
+::-webkit-scrollbar-thumb{ background:var(--border2); border-radius:99px; }
+::-webkit-scrollbar-thumb:hover{ background:rgba(255,255,255,0.16); }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- LEFT ICON RAIL -->
+  <div id="sidebar">
+    <div class="sidebar-logo">✦</div>
+    <div class="sidebar-icon active" id="sib-scene" title="Scene panel" onclick="showPanel('scene')">◈</div>
+    <div class="sidebar-icon" id="sib-branch" title="Branches" onclick="showPanel('branch')">⑂</div>
+    <div class="sidebar-icon" id="sib-story" title="Storylines" onclick="showPanel('story')">〰</div>
+    <div class="sidebar-sep"></div>
+    <div class="sidebar-icon" title="Auto-arrange" onclick="autoArrange()">⊞</div>
+    <div class="sidebar-icon" title="Collapse all" onclick="collapseAll()">⊟</div>
+    <div class="sidebar-icon" title="Expand all" onclick="expandAll()">⊞</div>
+    <div class="sidebar-sep"></div>
+    <div class="sidebar-icon" title="Export JSON" onclick="exportData()">↑</div>
+    <div class="sidebar-icon" title="Import JSON" onclick="document.getElementById('importInput').click()">↓</div>
+    <input type="file" id="importInput" accept="application/json" style="display:none" onchange="importData(event)">
+    <div class="sidebar-sep"></div>
+    <div class="sidebar-icon" id="sib-settings" title="Settings" onclick="showPanel('settings')">⚙</div>
+    <div class="sidebar-icon" title="Help" onclick="toggleHelp(true)">?</div>
+  </div>
+
+  <!-- CANVAS -->
+  <div id="canvasArea">
+    <div id="canvasTitle">Story Canvas</div>
+    <div class="canvas-outer" id="canvasOuter">
+      <div class="canvas-content" id="canvasContent">
+        <svg class="lines-svg" id="linesSvg"></svg>
+        <div id="cardsLayer"></div>
+      </div>
+    </div>
+
+    <!-- BRANCH CHIPS STRIP -->
+    <div id="branchstrip"></div>
+
+    <!-- RIGHT PANEL -->
+    <div id="panel">
+      <div class="panel-tabs" id="panelTabs">
+        <div class="panel-tab active" data-tab="scene" onclick="showPanel('scene')">Scene</div>
+        <div class="panel-tab" data-tab="branch" onclick="showPanel('branch')">Branches</div>
+        <div class="panel-tab" data-tab="story" onclick="showPanel('story')">Storylines</div>
+        <div class="panel-tab" data-tab="settings" onclick="showPanel('settings')">Settings</div>
+      </div>
+      <div class="panel-body" id="panelBody"></div>
+    </div>
+
+    <!-- MODE BAR -->
+    <div id="modebar">
+      <div class="mb-item" id="mb-connect" onclick="setMode('connect')">⤳ connect</div>
+      <div class="mb-sep"></div>
+      <div class="mb-item" id="mb-story" onclick="setMode('story')">— storyline</div>
+      <div class="mb-sep"></div>
+      <div class="mb-item" id="mb-arrange" onclick="autoArrange()">⊞ arrange</div>
+      <div class="mb-sep"></div>
+      <div class="mb-item done" id="mb-done" onclick="setMode('none')" style="display:none">✓ done</div>
+    </div>
+  </div>
+</div>
+
+<!-- HELP MODAL -->
+<div class="modal-overlay hidden" id="helpModal">
+  <div class="modal-box">
+    <h2>How this works</h2>
+    <p>Scenes live on a free canvas — drag any card wherever you want, or use the arrange icon in the sidebar to lay everything out.</p>
+    <h3>Branch Scene Sets</h3>
+    <p>Select a scene, open the Scene panel, and click <b>Fork branch</b>. The new set gets an id like <b>BSS.05A</b>. Forking from inside a branch creates nested sub-branches automatically.</p>
+    <h3>Connect lines</h3>
+    <p>Press <b>connect</b> in the mode bar, then click two scenes in order. Any scene can connect to any other.</p>
+    <h3>Storylines</h3>
+    <p>Press <b>storyline</b>, click scenes in reading order, then confirm in the Scene panel. That path renders bold across the canvas.</p>
+    <h3>Saving</h3>
+    <p>Everything autosaves. Use the export/import arrows in the sidebar for JSON backups.</p>
+    <button class="action primary" onclick="toggleHelp(false)" style="margin-top:18px">Close</button>
+  </div>
+</div>
+
+<!-- WRITER OVERLAY -->
+<div id="writerOverlay">
+  <div id="writerHeader">
+    <span id="writerSceneLabel"></span>
+    <button id="writerClose" onclick="closeWriter()">Esc — close</button>
+  </div>
+  <div id="writerSceneTitle"></div>
+  <div id="writerMeta">
+    <span id="writerWordCount">0 words</span>
+  </div>
+  <textarea id="writerTextarea" placeholder="Write the scene…" spellcheck="true"></textarea>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================== STATE ============================== */
+let state = null;
+const STORAGE_KEY = 'storycanvas:v1';
+let saveTimer = null;
+
+function freshState(){
+  return {
+    scenes:{}, branchSets:{}, lines:{}, storylines:{}, trunk:[],
+    counters:{scene:0,branchSet:0,line:0,storyline:0},
+    hidden:[], colors:{}, projectTitle:'Story Canvas'
+  };
+}
+function uid(kind){ state.counters[kind]+=1; return kind+'_'+state.counters[kind]; }
+
+/* ============================== PERSISTENCE ============================== */
+async function loadState(){
+  try{
+    const res = await window.storage.get(STORAGE_KEY,false);
+    if(res&&res.value){ state=JSON.parse(res.value); if(!state.projectTitle)state.projectTitle='Story Canvas'; }
+    else{ state=freshState(); seedExample(); }
+  }catch(e){ state=freshState(); seedExample(); }
+  document.getElementById('canvasTitle').textContent=state.projectTitle;
+}
+function scheduleSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(saveState,500); }
+async function saveState(){
+  try{ await window.storage.set(STORAGE_KEY,JSON.stringify(state),false); }
+  catch(e){ showToast('Save failed — changes in this tab only'); }
+}
+
+/* ============================== COLOR ============================== */
+function colorForBranchSet(bssId){
+  if(!bssId) return '#8aabff';
+  if(state.colors[bssId]) return state.colors[bssId];
+  const idx=Object.keys(state.colors).length;
+  const hue=Math.round((idx*137.508+24)%360);
+  const c='hsl('+hue+',65%,68%)';
+  state.colors[bssId]=c;
+  return c;
+}
+
+/* ============================== ID / LABEL HELPERS ============================== */
+function bssLevelLabel(d){ if(d<=1)return'BSS'; if(d===2)return'SBSS'; const o=['Second','Third','Fourth','Fifth','Sixth']; return(o[d-3]||(d-1)+'th')+' SBSS'; }
+function bssChainToken(bss){ const fs=state.scenes[bss.branchFromSceneId]; return (fs?fs.number:'??')+bss.letter; }
+function bssChainId(bss){ const own=bssChainToken(bss); if(bss.parentBranchSetId&&state.branchSets[bss.parentBranchSetId]) return bssChainId(state.branchSets[bss.parentBranchSetId])+'.'+own; return own; }
+function bssDisplayId(bss){ return bssLevelLabel(bss.depth)+'.'+bssChainId(bss); }
+function sceneBranchSuffix(scene){ if(!scene.branchSetId)return''; const bss=state.branchSets[scene.branchSetId]; if(!bss)return''; return'.'+bssChainId(bss); }
+function sceneDisplayTitle(scene){ return'Scene '+scene.number+sceneBranchSuffix(scene); }
+function sceneRole(scene){ if(!scene.branchSetId)return null; const bss=state.branchSets[scene.branchSetId]; if(!bss)return null; const idx=bss.sceneIds.indexOf(scene.id); if(idx===-1)return null; if(bss.sceneIds.length===1)return'both'; if(idx===0)return'in'; if(idx===bss.sceneIds.length-1)return'out'; return null; }
+function forksFromScene(sid){ return Object.values(state.branchSets).filter(b=>b.branchFromSceneId===sid); }
+function outgoingCrossLines(scene){ return Object.values(state.lines).filter(l=>l.from===scene.id&&!l.isForkLink&&state.scenes[l.to]&&state.scenes[l.to].branchSetId!==scene.branchSetId); }
+function nextLetter(fromSceneId){ return String.fromCharCode(65+Object.values(state.branchSets).filter(b=>b.branchFromSceneId===fromSceneId).length); }
+
+/* ============================== MUTATIONS ============================== */
+function addScene({number,title,desc,branchSetId,afterSceneId,storyTime,sceneDate,sceneTimeOfDay,sceneDuration,writerTime,pos}){
+  const id=uid('scene');
+  const scene={id,number:number||'',title:title||'Untitled scene',desc:desc||'',storyTime:storyTime||'',sceneDate:sceneDate||'',sceneTimeOfDay:sceneTimeOfDay||'',sceneDuration:sceneDuration||'',writerTime:writerTime||'',branchSetId:branchSetId||null,pos:pos||{x:60,y:60}};
+  state.scenes[id]=scene;
+  if(branchSetId){ const bss=state.branchSets[branchSetId]; const at=afterSceneId?bss.sceneIds.indexOf(afterSceneId)+1:bss.sceneIds.length; bss.sceneIds.splice(at,0,id); }
+  else{ const at=afterSceneId?state.trunk.indexOf(afterSceneId)+1:state.trunk.length; state.trunk.splice(at,0,id); }
+  if(afterSceneId&&state.scenes[afterSceneId]){ const prev=state.scenes[afterSceneId]; scene.pos={x:prev.pos.x,y:prev.pos.y+150}; addLine(afterSceneId,id); }
+  return scene;
+}
+function addLine(from,to,opts){
+  if(Object.values(state.lines).some(l=>l.from===from&&l.to===to)) return null;
+  const id=uid('line'); const line={id,from,to,isStoryline:false,storylineId:null}; if(opts)Object.assign(line,opts); state.lines[id]=line; return line;
+}
+function removeLine(id){ delete state.lines[id]; }
+function findLineBetween(a,b){ return Object.values(state.lines).find(l=>(l.from===a&&l.to===b)||(l.from===b&&l.to===a)); }
+
+function forkBranch({fromSceneId,title,firstNumber,firstTitle}){
+  const fromScene=state.scenes[fromSceneId];
+  const parentBssId=fromScene.branchSetId||null;
+  const depth=parentBssId?state.branchSets[parentBssId].depth+1:1;
+  const id=uid('branchSet');
+  const bss={id,depth,parentBranchSetId:parentBssId,branchFromSceneId:fromSceneId,letter:nextLetter(fromSceneId),title:title||'Untitled branch',sceneIds:[]};
+  state.branchSets[id]=bss; colorForBranchSet(id);
+  const newScene=addScene({number:firstNumber||fromScene.number,title:firstTitle||'New branch scene',branchSetId:id,pos:{x:fromScene.pos.x+270,y:fromScene.pos.y+150}});
+  addLine(fromSceneId,newScene.id,{isForkLink:true});
+  return{bss,scene:newScene};
+}
+
+function deleteLinesTouching(sid){ Object.keys(state.lines).forEach(lid=>{ const l=state.lines[lid]; if(l.from===sid||l.to===sid)delete state.lines[lid]; }); }
+function deleteScene(sceneId){
+  const scene=state.scenes[sceneId]; if(!scene)return;
+  forksFromScene(sceneId).forEach(b=>deleteBranchSet(b.id));
+  if(scene.branchSetId){ const bss=state.branchSets[scene.branchSetId]; if(bss)bss.sceneIds=bss.sceneIds.filter(s=>s!==sceneId); } else state.trunk=state.trunk.filter(s=>s!==sceneId);
+  deleteLinesTouching(sceneId); delete state.scenes[sceneId];
+  Object.values(state.storylines).forEach(st=>{ st.sceneIds=st.sceneIds.filter(s=>s!==sceneId); });
+}
+function deleteBranchSet(bssId){
+  const bss=state.branchSets[bssId]; if(!bss)return;
+  Object.values(state.branchSets).filter(b=>b.parentBranchSetId===bssId).forEach(c=>deleteBranchSet(c.id));
+  [...bss.sceneIds].forEach(sid=>{ deleteLinesTouching(sid); delete state.scenes[sid]; });
+  delete state.branchSets[bssId]; delete state.colors[bssId];
+  state.hidden=state.hidden.filter(h=>h!==bssId);
+}
+function setStoryline(orderedSceneIds,name,existingId){
+  let stId=existingId;
+  if(!stId){ stId=uid('storyline'); state.storylines[stId]={id:stId,name:name||('Storyline '+stId.split('_')[1]),sceneIds:[]}; } else if(name){ state.storylines[stId].name=name; }
+  for(let i=0;i<orderedSceneIds.length-1;i++){ const a=orderedSceneIds[i],b=orderedSceneIds[i+1]; let line=findLineBetween(a,b); if(!line)line=addLine(a,b); line.isStoryline=true; line.storylineId=stId; }
+  state.storylines[stId].sceneIds=orderedSceneIds.slice(); return stId;
+}
+function deleteStoryline(stId){ Object.values(state.lines).forEach(l=>{ if(l.storylineId===stId){l.isStoryline=false;l.storylineId=null;} }); delete state.storylines[stId]; }
+
+/* ============================== SEED ============================== */
+function seedExample(){
+  const s01=addScene({number:'01',title:'The Beginning',desc:'Protagonist wakes in an unfamiliar town with no memory of how they arrived.',storyTime:'Day 1, Dawn',pos:{x:60,y:60}});
+  const s02=addScene({number:'02',title:'The Journey',desc:'Following a river downstream, they meet travelers who warn about the road ahead.',storyTime:'Day 1, Afternoon',afterSceneId:s01.id});
+  const s03=addScene({number:'03',title:'First Clue',desc:'A half-burned letter in an abandoned house. The name on it matches a dream.',storyTime:'Day 2, Morning',afterSceneId:s02.id});
+  const s04=addScene({number:'04',title:'The Meeting',desc:'Saimon appears for the first time. Quiet. Helpful. Trusted too quickly.',storyTime:'Day 2, Evening',afterSceneId:s03.id});
+  const branchA=forkBranch({fromSceneId:s04.id,title:'What if this had happened',firstNumber:'05',firstTitle:'The Incident'});
+  state.scenes[branchA.scene.id].desc='Saimon leads them into a warehouse. Something happens that changes everything.'; state.scenes[branchA.scene.id].storyTime='Day 3, Midnight';
+  const s06a=addScene({number:'06',title:'The Confrontation',desc:'They confront Saimon — his reaction is not guilt, but fear.',branchSetId:branchA.bss.id,afterSceneId:branchA.scene.id,storyTime:'Day 4, Morning'});
+  const sub=forkBranch({fromSceneId:s06a.id,title:'Saimon is the killer',firstNumber:'06.1',firstTitle:'Saimon Appears'});
+  state.scenes[sub.scene.id].desc='Saimon reveals he is the killer, calmly, as if confessing a minor inconvenience.'; state.scenes[sub.scene.id].storyTime='Day 4, Morning · Alt';
+  const subOut=addScene({number:'06.2',title:'Nobody Doubts',desc:'They decide to say nothing. Saimon walks free. Nobody doubts him.',branchSetId:sub.bss.id,afterSceneId:sub.scene.id,storyTime:'Day 4, Noon · Alt'});
+  const s07a=addScene({number:'07',title:'The Escape',desc:'They escape through the old market. Saimon does not follow. The city burns behind them.',branchSetId:branchA.bss.id,afterSceneId:s06a.id,storyTime:'Day 4, Evening'});
+  addLine(subOut.id,s07a.id);
+  const branchB=forkBranch({fromSceneId:s04.id,title:"What if this hadn't happened",firstNumber:'05',firstTitle:'The Silence'});
+  state.scenes[branchB.scene.id].desc='Saimon never takes them to the warehouse. Instead he disappears, leaving them alone.'; state.scenes[branchB.scene.id].storyTime='Day 3, Morning';
+  const s06b=addScene({number:'06',title:'The Distance',desc:'Three days searching. On the third evening, a child says they saw Saimon leave with a woman nobody recognized.',branchSetId:branchB.bss.id,afterSceneId:branchB.scene.id,storyTime:'Day 3–6'});
+  const s07b=addScene({number:'07',title:'The Return',desc:'They stop searching and walk to the edge of the city, deciding to carry the truth alone.',branchSetId:branchB.bss.id,afterSceneId:s06b.id,storyTime:'Day 7, Sunset'});
+  const s08=addScene({number:'08',title:'The Resolution',desc:'All paths converge. Whatever happened in scenes 5 through 7, this moment is shared.',storyTime:'Day 8, Dawn',afterSceneId:s04.id});
+  addLine(s07a.id,s08.id); addLine(s07b.id,s08.id);
+  setStoryline([s01.id,s02.id,s03.id,s04.id],'Main thread');
+  setStoryline([s04.id,branchA.scene.id,s06a.id,sub.scene.id,subOut.id,s07a.id,s08.id],'Reveal path');
+  autoArrangeLayout();
+}
+
+/* ============================== LAYOUT ============================== */
+function autoArrangeLayout(){
+  const colMap={};let col=1;
+  Object.values(state.branchSets).sort((a,b)=>parseInt(a.id.split('_')[1])-parseInt(b.id.split('_')[1])).forEach(b=>{colMap[b.id]=col++;});
+  const rows={};Object.keys(state.scenes).forEach(id=>rows[id]=0);
+  let changed=true,iter=0;
+  while(changed&&iter++<1000){ changed=false; Object.values(state.lines).forEach(l=>{ if(!state.scenes[l.from]||!state.scenes[l.to])return; const r=rows[l.from]+1; if(r>rows[l.to]){rows[l.to]=r;changed=true;} }); }
+  const COL_W=420,ROW_H=220,PAD_X=70,PAD_Y=60;
+  Object.values(state.scenes).forEach(scene=>{ const c=scene.branchSetId?(colMap[scene.branchSetId]||0):0; scene.pos={x:PAD_X+c*COL_W,y:PAD_Y+rows[scene.id]*ROW_H}; });
+}
+function autoArrange(){ autoArrangeLayout(); renderAll(); scheduleSave(); showToast('Re-arranged'); }
+
+/* ============================== UI STATE ============================== */
+let selectedSceneId=null;
+let mode='none';
+let picks=[];
+let currentPanel='scene';
+let dragInfo=null;
+
+function setMode(m){
+  mode=(mode===m)?'none':m;
+  picks=[];
+  renderModebar();
+  renderPanelContent();
+  renderCards();
+}
+
+function showPanel(tab){
+  currentPanel=tab;
+  document.querySelectorAll('.panel-tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===tab));
+  document.querySelectorAll('.sidebar-icon[id^="sib-"]').forEach(el=>el.classList.remove('active'));
+  const sib=document.getElementById('sib-'+tab);
+  if(sib) sib.classList.add('active');
+  const panel=document.getElementById('panel');
+  panel.classList.remove('closed');
+  renderPanelContent();
+}
+
+function renderModebar(){
+  document.getElementById('mb-connect').classList.toggle('active',mode==='connect');
+  document.getElementById('mb-story').classList.toggle('active',mode==='story');
+  const done=document.getElementById('mb-done');
+  done.style.display=(mode!=='none')?'':'none';
+}
+
+function toggleHelp(show){ document.getElementById('helpModal').classList.toggle('hidden',!show); }
+
+let toastTimer=null;
+function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2200); }
+
+function escapeHtml(str){ const d=document.createElement('div'); d.textContent=str==null?'':String(str); return d.innerHTML; }
+function escapeAttr(str){ return escapeHtml(str).replace(/"/g,'&quot;'); }
+
+/* ============================== CARDS ============================== */
+function renderCards(){
+  const layer=document.getElementById('cardsLayer');
+  layer.innerHTML='';
+  let maxX=1200,maxY=900;
+  Object.values(state.scenes).forEach(scene=>{
+    const hidden=scene.branchSetId&&state.hidden.includes(scene.branchSetId);
+    const wrap=document.createElement('div');
+    wrap.className='scene-wrap'+(hidden?' dimmed':'');
+    wrap.id='wrap-'+scene.id;
+    wrap.style.left=scene.pos.x+'px';
+    wrap.style.top=scene.pos.y+'px';
+    maxX=Math.max(maxX,scene.pos.x+560);
+    maxY=Math.max(maxY,scene.pos.y+400);
+
+    const accent=colorForBranchSet(scene.branchSetId);
+    const role=sceneRole(scene);
+    const forks=forksFromScene(scene.id);
+    const merges=outgoingCrossLines(scene);
+    const pickIdx=picks.indexOf(scene.id);
+    const onStorylines=Object.values(state.storylines).filter(st=>st.sceneIds.includes(scene.id));
+
+    let badges='';
+    if(forks.length) badges+='<span class="s-badge fork">⤷ Forks: '+forks.map(b=>bssDisplayId(b)).join(' / ')+'</span>';
+    merges.forEach(l=>{ const tgt=state.scenes[l.to]; badges+='<span class="s-badge merge">⤶ '+escapeHtml(sceneDisplayTitle(tgt))+'</span>'; });
+    onStorylines.forEach(st=>{ badges+='<span class="s-badge story">— '+escapeHtml(st.name)+'</span>'; });
+
+    const roleLabel=role?(role==='in'?' · branch-in':role==='out'?' · branch-out':' · branch-in/out'):'';
+    const isSelected=selectedSceneId===scene.id;
+    const isPicked=pickIdx>-1;
+
+    wrap.innerHTML=
+      '<div class="scene-card'+(isSelected?' selected':'')+(isPicked?' picked':'')+'" style="--accent:'+accent+'" id="card-'+scene.id+'">' +
+        (isPicked?'<div class="pick-badge">'+(pickIdx+1)+'</div>':'')+
+        '<div class="card-head">'+
+          '<div class="card-meta">'+
+            '<div class="card-num">'+sceneDisplayTitle(scene)+roleLabel+'</div>'+
+            '<div class="card-title">'+escapeHtml(scene.title)+'</div>'+
+          '</div>'+
+          '<button class="card-toggle" data-id="'+scene.id+'">▲</button>'+
+        '</div>'+
+        '<div class="card-body" id="body-'+scene.id+'">'+
+          (scene.desc?'<div class="card-desc">'+escapeHtml(scene.desc)+'</div>':'')+
+          (function(){
+            const parts=[];
+            if(scene.sceneDate) parts.push(scene.sceneDate);
+            if(scene.sceneTimeOfDay) parts.push(scene.sceneTimeOfDay);
+            if(scene.sceneDuration) parts.push('('+scene.sceneDuration+')');
+            if(scene.storyTime&&!parts.length) parts.push(scene.storyTime);
+            return parts.length?'<div class="card-time">'+escapeHtml(parts.join(' · '))+'</div>':'';
+          })()+
+          (badges?'<div class="badge-row">'+badges+'</div>':'')+
+        '</div>'+
+      '</div>';
+
+    wrap.querySelector('.card-toggle').addEventListener('click',e=>{
+      e.stopPropagation();
+      const body=document.getElementById('body-'+scene.id);
+      const btn=e.currentTarget;
+      const col=body.classList.toggle('collapsed');
+      btn.textContent=col?'▼':'▲';
+      requestAnimationFrame(()=>requestAnimationFrame(_drawLinesNow));
+    });
+
+    attachDrag(wrap,scene);
+    layer.appendChild(wrap);
+  });
+
+  const content=document.getElementById('canvasContent');
+  content.style.width=maxX+'px'; content.style.height=maxY+'px';
+  const svgEl=document.getElementById('linesSvg');
+  svgEl.setAttribute('width',maxX); svgEl.setAttribute('height',maxY);
+  svgEl.setAttribute('viewBox','0 0 '+maxX+' '+maxY);
+  requestAnimationFrame(()=>requestAnimationFrame(_drawLinesNow));
+}
+
+/* ============================== DRAG ============================== */
+function attachDrag(wrap,scene){
+  let startX,startY,origX,origY,moved=false;
+  wrap.addEventListener('pointerdown',e=>{
+    if(e.target.closest('.card-toggle')) return;
+    startX=e.clientX; startY=e.clientY;
+    origX=scene.pos.x; origY=scene.pos.y; moved=false;
+    wrap.setPointerCapture(e.pointerId);
+    const onMove=ev=>{ const dx=ev.clientX-startX,dy=ev.clientY-startY; if(Math.abs(dx)>3||Math.abs(dy)>3)moved=true; if(moved){ wrap.classList.add('dragging'); scene.pos.x=Math.max(0,origX+dx); scene.pos.y=Math.max(0,origY+dy); wrap.style.left=scene.pos.x+'px'; wrap.style.top=scene.pos.y+'px'; drawLines(); } };
+    const onUp=()=>{ wrap.classList.remove('dragging'); window.removeEventListener('pointermove',onMove); window.removeEventListener('pointerup',onUp); if(moved){scheduleSave();renderCards();}else{handleCardClick(scene.id);} };
+    window.addEventListener('pointermove',onMove); window.addEventListener('pointerup',onUp);
+  });
+}
+
+function handleCardClick(sceneId){
+  if(mode==='connect'||mode==='story'){
+    const idx=picks.indexOf(sceneId);
+    if(idx>-1)picks.splice(idx,1); else picks.push(sceneId);
+    renderPanelContent(); renderCards(); return;
+  }
+  selectedSceneId=sceneId;
+  showPanel('scene');
+  renderCards();
+}
+
+/* ============================== LINES ============================== */
+function getCardRect(el){ return{x:el.offsetLeft,y:el.offsetTop,w:el.offsetWidth,h:el.offsetHeight}; }
+function anchorPoints(fromEl,toEl){
+  const f=getCardRect(fromEl),t=getCardRect(toEl);
+  const fCx=f.x+f.w/2,fCy=f.y+f.h/2,tCx=t.x+t.w/2,tCy=t.y+t.h/2;
+  const dx=tCx-fCx,dy=tCy-fCy;
+  let from,to;
+  if(Math.abs(dy)>=Math.abs(dx)){
+    if(dy>=0){from={x:fCx,y:f.y+f.h,side:'bottom'};to={x:tCx,y:t.y,side:'top'};}
+    else{from={x:fCx,y:f.y,side:'top'};to={x:tCx,y:t.y+t.h,side:'bottom'};}
+  }else{
+    if(dx>=0){from={x:f.x+f.w,y:fCy,side:'right'};to={x:t.x,y:tCy,side:'left'};}
+    else{from={x:f.x,y:fCy,side:'left'};to={x:t.x+t.w,y:tCy,side:'right'};}
+  }
+  return{from,to};
+}
+function makePath(from,to){
+  const dx=to.x-from.x,dy=to.y-from.y,dist=Math.sqrt(dx*dx+dy*dy);
+  const pull=Math.max(60,dist*0.45);
+  let c1,c2;
+  if(from.side==='bottom')c1={x:from.x,y:from.y+pull};
+  else if(from.side==='top')c1={x:from.x,y:from.y-pull};
+  else if(from.side==='right')c1={x:from.x+pull,y:from.y};
+  else c1={x:from.x-pull,y:from.y};
+  if(to.side==='top')c2={x:to.x,y:to.y-pull};
+  else if(to.side==='bottom')c2={x:to.x,y:to.y+pull};
+  else if(to.side==='left')c2={x:to.x-pull,y:to.y};
+  else c2={x:to.x+pull,y:to.y};
+  return`M ${from.x} ${from.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${to.x} ${to.y}`;
+}
+let _drawLinesRaf=null;
+function drawLines(){ if(_drawLinesRaf)return; _drawLinesRaf=requestAnimationFrame(()=>{_drawLinesRaf=null;_drawLinesNow();}); }
+function _drawLinesNow(){
+  const svg=document.getElementById('linesSvg');
+  svg.innerHTML='';
+  const defs=document.createElementNS('http://www.w3.org/2000/svg','defs');
+  function makeMarker(id,color,size){
+    const m=document.createElementNS('http://www.w3.org/2000/svg','marker');
+    m.setAttribute('id',id); m.setAttribute('markerWidth',size); m.setAttribute('markerHeight',size);
+    m.setAttribute('refX',size-1); m.setAttribute('refY',size/2); m.setAttribute('orient','auto');
+    const p=document.createElementNS('http://www.w3.org/2000/svg','polygon');
+    p.setAttribute('points',`0 0, ${size} ${size/2}, 0 ${size}`); p.setAttribute('fill',color); p.setAttribute('opacity','0.75');
+    m.appendChild(p); return m;
+  }
+  defs.appendChild(makeMarker('arrow-story','#eceef8',7));
+  svg.appendChild(defs);
+  const normal=[],story=[];
+  Object.values(state.lines).forEach(l=>(l.isStoryline?story:normal).push(l));
+  function draw(l,bold){
+    const fw=document.getElementById('wrap-'+l.from),tw=document.getElementById('wrap-'+l.to);
+    if(!fw||!tw) return;
+    const fs=state.scenes[l.from],ts=state.scenes[l.to];
+    if(!fs||!ts) return;
+    if(fs.branchSetId&&state.hidden.includes(fs.branchSetId)) return;
+    if(ts.branchSetId&&state.hidden.includes(ts.branchSetId)) return;
+    const{from,to}=anchorPoints(fw,tw);
+    const d=makePath(from,to);
+    const lc=bold?'#eceef8':colorForBranchSet(ts.branchSetId||fs.branchSetId);
+    let mid=null;
+    if(!bold){ mid='arrow-'+lc.replace(/[^a-z0-9]/gi,'_'); if(!svg.querySelector('#'+mid))defs.appendChild(makeMarker(mid,lc,6)); }
+    const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('d',d); path.setAttribute('fill','none');
+    if(bold){ path.setAttribute('stroke','#eceef8'); path.setAttribute('stroke-width','2.2'); path.setAttribute('opacity','0.9'); path.setAttribute('marker-end','url(#arrow-story)'); }
+    else{ path.setAttribute('stroke',lc); path.setAttribute('stroke-width',l.isForkLink?'1.8':'1.3'); path.setAttribute('opacity',l.isForkLink?'0.55':'0.38'); if(!l.isForkLink)path.setAttribute('stroke-dasharray','5 4'); path.setAttribute('marker-end','url(#'+mid+')'); }
+    svg.appendChild(path);
+  }
+  normal.forEach(l=>draw(l,false)); story.forEach(l=>draw(l,true));
+}
+
+/* ============================== BRANCH STRIP ============================== */
+function renderBranchStrip(){
+  const strip=document.getElementById('branchstrip');
+  strip.innerHTML='';
+  // "all" chip
+  const all=document.createElement('div');
+  all.className='bs-chip';
+  all.innerHTML='<span class="bs-dot" style="background:var(--main)"></span>all';
+  all.onclick=()=>setAllHidden(false);
+  strip.appendChild(all);
+  Object.values(state.branchSets).sort((a,b)=>bssDisplayId(a).localeCompare(bssDisplayId(b))).forEach(bss=>{
+    const hidden=state.hidden.includes(bss.id);
+    const chip=document.createElement('div');
+    chip.className='bs-chip'+(hidden?' faded':'');
+    chip.innerHTML='<span class="bs-dot" style="background:'+colorForBranchSet(bss.id)+'"></span>'+bssDisplayId(bss);
+    chip.title=bss.title;
+    chip.onclick=()=>toggleBranchHidden(bss.id);
+    strip.appendChild(chip);
+  });
+}
+function toggleBranchHidden(id){ const i=state.hidden.indexOf(id); if(i>-1)state.hidden.splice(i,1); else state.hidden.push(id); scheduleSave(); renderBranchStrip(); renderCards(); }
+function setAllHidden(hide){ state.hidden=hide?Object.keys(state.branchSets):[]; scheduleSave(); renderBranchStrip(); renderCards(); }
+
+/* ============================== PANEL ============================== */
+function renderPanelContent(){
+  const body=document.getElementById('panelBody');
+  if(currentPanel==='scene') body.innerHTML=buildScenePanel();
+  else if(currentPanel==='branch') body.innerHTML=buildBranchPanel();
+  else if(currentPanel==='settings') body.innerHTML=buildSettingsPanel();
+  else body.innerHTML=buildStoryPanel();
+  bindPanelEvents();
+}
+
+function buildScenePanel(){
+  // picks info at top when in mode
+  let picksHtml='';
+  if(mode!=='none'){
+    const hint=mode==='connect'?'Click two scenes to connect them.':'Click scenes in reading order.';
+    picksHtml='<div class="panel-section">'+
+      '<span class="p-label">'+escapeHtml(mode)+' mode — '+escapeHtml(hint)+'</span>'+
+      (picks.length?picks.map((id,i)=>{
+        const sc=state.scenes[id]; if(!sc)return'';
+        return'<div class="pick-item"><span class="pick-num">'+(i+1)+'</span><span class="pick-lbl">'+escapeHtml(sceneDisplayTitle(sc))+' — '+escapeHtml(sc.title)+'</span><span class="pick-rm" data-pick-i="'+i+'">✕</span></div>';
+      }).join(''):'<div class="p-hint" style="margin-top:6px">No scenes picked yet.</div>')+
+      buildPickActions()+
+    '</div>';
+  }
+
+  if(!selectedSceneId||!state.scenes[selectedSceneId]){
+    return picksHtml+'<div class="panel-section"><span class="p-hint">Click a scene to edit it here.</span>'+
+      '<div style="margin-top:12px"><button class="action primary" data-action="quickadd">+ Add first scene</button></div></div>';
+  }
+
+  const scene=state.scenes[selectedSceneId];
+  const bss=scene.branchSetId?state.branchSets[scene.branchSetId]:null;
+  return picksHtml+
+    '<div class="panel-section">'+
+      '<div class="p-sub">'+sceneDisplayTitle(scene)+(bss?' · '+bssDisplayId(bss):' · Trunk')+'</div>'+
+      '<div class="field"><label class="field-label">Number</label><input id="f-number" value="'+escapeAttr(scene.number)+'"></div>'+
+      '<div class="field"><label class="field-label">Title</label><input id="f-title" value="'+escapeAttr(scene.title)+'"></div>'+
+      '<div class="field"><label class="field-label">Description</label>'+
+      '<div id="desc-preview" onclick="openWriter(\''+escapeAttr(scene.id)+'\')" style="cursor:pointer;padding:8px 10px;background:var(--surface4);border:1px solid var(--border2);border-radius:5px;font-size:12px;line-height:1.7;color:'+(scene.desc?'var(--ink)':'var(--ink3)')+';min-height:52px;transition:border-color .15s;" onmouseover="this.style.borderColor=\'var(--main)\'" onmouseout="this.style.borderColor=\'var(--border2)\'">'+
+      (scene.desc?escapeHtml(scene.desc.length>120?scene.desc.slice(0,120)+'…':scene.desc):'<span style="font-family:var(--mono);font-size:10px;letter-spacing:0.4px">Click to write…</span>')+
+      '</div></div>'+
+      '<div class="field"><label class="field-label">Scene Date</label><input type="date" id="f-scene-date" value="'+escapeAttr(scene.sceneDate||'')+'"></div>'+
+      '<div class="field"><label class="field-label">Time of Day</label><input type="time" id="f-scene-time" value="'+escapeAttr(scene.sceneTimeOfDay||'')+'"></div>'+
+      '<div class="field"><label class="field-label">Duration</label><input id="f-scene-duration" value="'+escapeAttr(scene.sceneDuration||'')+'" placeholder="e.g. 2 hours, overnight, 3 days"></div>'+
+      '<div class="field" style="display:none"><label class="field-label">Story time (legacy)</label><input id="f-story" value="'+escapeAttr(scene.storyTime)+'" placeholder="Day 3, Midnight"></div>'+
+      '<div class="field"><label class="field-label">Writer note</label><input id="f-writer" value="'+escapeAttr(scene.writerTime)+'" placeholder="Jun 17, 2026"></div>'+
+      '<div class="action-row" style="margin-top:10px">'+
+        '<button class="action primary" data-action="addafter">+ after</button>'+
+        '<button class="action" data-action="fork">⤷ fork</button>'+
+        '<button class="action danger" data-action="delscene">delete</button>'+
+      '</div>'+
+      '<div id="forkFormBox"></div>'+
+    '</div>';
+}
+
+function buildPickActions(){
+  if(mode==='connect'&&picks.length===2){
+    return'<div style="margin-top:8px"><button class="action primary" data-action="doconnect">Connect these scenes →</button></div>';
+  }
+  if(mode==='story'&&picks.length>=2){
+    return'<div style="margin-top:8px">'+
+      '<input id="storyNameInput" placeholder="Storyline name" style="margin-bottom:6px">'+
+      '<button class="action primary" data-action="dostory">Set as storyline →</button>'+
+    '</div>';
+  }
+  if(picks.length){ return'<div style="margin-top:6px"><button class="action danger" data-action="clearpicks">clear picks</button></div>'; }
+  return'';
+}
+
+function buildBranchPanel(){
+  const list=Object.values(state.branchSets).sort((a,b)=>a.depth-b.depth||bssDisplayId(a).localeCompare(bssDisplayId(b)));
+  if(!list.length) return'<div class="panel-section"><span class="p-hint">No branches yet. Select a scene and click "fork" to create one.</span></div>';
+  return'<div class="panel-section">'+list.map(bss=>{
+    const hidden=state.hidden.includes(bss.id);
+    return'<div class="b-row" style="padding-left:'+(bss.depth-1)*12+'px" data-bss-id="'+bss.id+'">'+
+      '<span class="b-dot" style="background:'+colorForBranchSet(bss.id)+'"></span>'+
+      '<span class="b-label">'+bssDisplayId(bss)+' — '+escapeHtml(bss.title)+'</span>'+
+      '<span class="b-eye" data-bss-eye="'+bss.id+'">'+(hidden?'○':'●')+'</span>'+
+      '<span class="b-del" data-bss-del="'+bss.id+'">✕</span>'+
+    '</div>';
+  }).join('')+'</div>';
+}
+
+function buildStoryPanel(){
+  const list=Object.values(state.storylines);
+  if(!list.length) return'<div class="panel-section"><span class="p-hint">No storylines yet. Use storyline mode to trace a read-through.</span></div>';
+  return'<div class="panel-section">'+list.map(st=>
+    '<div class="sl-row"><span class="sl-bar"></span><span class="sl-name">'+escapeHtml(st.name)+'</span><span class="sl-count">'+st.sceneIds.length+' scenes</span><span class="b-del" data-sl-del="'+st.id+'">✕</span></div>'
+  ).join('')+'</div>';
+}
+
+function buildSettingsPanel(){
+  return'<div class="settings-section">'+
+    '<span class="settings-title">Project</span>'+
+    '<div class="field"><label class="field-label">Title</label>'+
+    '<input id="f-project-title" value="'+escapeAttr(state.projectTitle||'Story Canvas')+'" placeholder="Story Canvas" maxlength="80"></div>'+
+    '<div class="settings-hint">Shown as a watermark on the canvas.</div>'+
+  '</div>';
+}
+
+function bindPanelEvents(){
+  // settings fields
+  const titleInput=document.getElementById('f-project-title');
+  if(titleInput){
+    titleInput.addEventListener('input',()=>{
+      state.projectTitle=titleInput.value||'Story Canvas';
+      document.getElementById('canvasTitle').textContent=state.projectTitle;
+      scheduleSave();
+    });
+  }
+  // scene fields
+  ['f-number','f-title','f-story','f-scene-date','f-scene-time','f-scene-duration','f-writer'].forEach(fid=>{
+    const el=document.getElementById(fid);
+    if(el&&selectedSceneId) el.addEventListener('input',()=>saveSceneFields(selectedSceneId));
+  });
+  // actions
+  document.querySelectorAll('[data-action]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const a=el.dataset.action;
+      if(a==='quickadd') quickAddScene();
+      else if(a==='addafter'&&selectedSceneId) addSceneAfter(selectedSceneId);
+      else if(a==='fork'&&selectedSceneId) openForkForm(selectedSceneId);
+      else if(a==='delscene'&&selectedSceneId) confirmDeleteScene(selectedSceneId);
+      else if(a==='doconnect'){ const l=addLine(picks[0],picks[1]); showToast(l?'Line created':'Already connected'); picks=[];setMode('none'); scheduleSave(); }
+      else if(a==='dostory'){ const name=document.getElementById('storyNameInput')?.value; setStoryline(picks.slice(),name); picks=[];setMode('none'); scheduleSave(); showToast('Storyline saved'); }
+      else if(a==='clearpicks'){ picks=[]; renderPanelContent(); renderCards(); }
+    });
+  });
+  // pick removes
+  document.querySelectorAll('[data-pick-i]').forEach(el=>{
+    el.addEventListener('click',()=>{ picks.splice(+el.dataset.pickI,1); renderPanelContent(); renderCards(); });
+  });
+  // branch actions
+  document.querySelectorAll('[data-bss-eye]').forEach(el=>{
+    el.addEventListener('click',e=>{ e.stopPropagation(); toggleBranchHidden(el.dataset.bssEye); renderPanelContent(); });
+  });
+  document.querySelectorAll('[data-bss-del]').forEach(el=>{
+    el.addEventListener('click',e=>{
+      e.stopPropagation();
+      const bss=state.branchSets[el.dataset.bssDel];
+      if(bss&&confirm('Delete '+bssDisplayId(bss)+' and everything inside it?')){ deleteBranchSet(el.dataset.bssDel); scheduleSave(); renderAll(); }
+    });
+  });
+  document.querySelectorAll('.b-row[data-bss-id]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const bss=state.branchSets[el.dataset.bssId]; if(!bss)return;
+      const first=bss.sceneIds[0];
+      if(first){ selectedSceneId=first; showPanel('scene'); renderCards(); document.getElementById('wrap-'+first)?.scrollIntoView({behavior:'smooth',block:'center'}); }
+    });
+  });
+  // storyline delete
+  document.querySelectorAll('[data-sl-del]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const st=state.storylines[el.dataset.slDel];
+      if(st&&confirm('Remove storyline "'+st.name+'"? Lines stay.')){ deleteStoryline(el.dataset.slDel); scheduleSave(); renderAll(); }
+    });
+  });
+}
+
+function saveSceneFields(sceneId){
+  const scene=state.scenes[sceneId]; if(!scene)return;
+  scene.number=document.getElementById('f-number')?.value||'';
+  scene.title=document.getElementById('f-title')?.value||'Untitled scene';
+  scene.storyTime=document.getElementById('f-story')?.value||'';
+  scene.sceneDate=document.getElementById('f-scene-date')?.value||'';
+  scene.sceneTimeOfDay=document.getElementById('f-scene-time')?.value||'';
+  scene.sceneDuration=document.getElementById('f-scene-duration')?.value||'';
+  scene.writerTime=document.getElementById('f-writer')?.value||'';
+  scheduleSave(); renderCards();
+  const sub=document.querySelector('#panelBody .p-sub');
+  if(sub){ const bss=scene.branchSetId?state.branchSets[scene.branchSetId]:null; sub.textContent=sceneDisplayTitle(scene)+(bss?' · '+bssDisplayId(bss):' · Trunk'); }
+}
+
+function quickAddScene(){
+  const last=state.trunk.length?state.scenes[state.trunk[state.trunk.length-1]]:null;
+  const scene=addScene({number:last?String(Number(last.number||0)+1).padStart(2,'0'):'01',title:'New scene',afterSceneId:last?last.id:null,pos:last?undefined:{x:60,y:60}});
+  selectedSceneId=scene.id; scheduleSave(); renderAll();
+}
+function addSceneAfter(afterId){
+  const after=state.scenes[afterId]; const num=Number(after.number);
+  const scene=addScene({number:isNaN(num)?after.number+'+1':String(num+1).padStart(2,'0'),title:'New scene',branchSetId:after.branchSetId,afterSceneId:afterId});
+  selectedSceneId=scene.id; scheduleSave(); renderAll();
+}
+function confirmDeleteScene(sceneId){
+  const scene=state.scenes[sceneId]; const forks=forksFromScene(sceneId);
+  const msg=forks.length?'Delete "'+scene.title+'" and '+forks.length+' branch set(s)?':'Delete "'+scene.title+'"?';
+  if(!confirm(msg))return;
+  deleteScene(sceneId); if(selectedSceneId===sceneId)selectedSceneId=null;
+  scheduleSave(); renderAll();
+}
+function openForkForm(fromSceneId){
+  const box=document.getElementById('forkFormBox'); if(!box)return;
+  const scene=state.scenes[fromSceneId];
+  const letter=nextLetter(fromSceneId);
+  const depth=scene.branchSetId?state.branchSets[scene.branchSetId].depth+1:1;
+  box.innerHTML='<div class="inline-form">'+
+    '<span class="p-label">New '+bssLevelLabel(depth)+' — letter "'+letter+'"</span>'+
+    '<div class="field"><label class="field-label">Branch title</label><input id="nb-title" placeholder="What if this had happened"></div>'+
+    '<div class="field"><label class="field-label">First scene number</label><input id="nb-number" value="'+escapeAttr(scene.number)+'"></div>'+
+    '<div class="field"><label class="field-label">First scene title</label><input id="nb-sctitle" placeholder="The Incident"></div>'+
+    '<div class="action-row">'+
+      '<button class="action primary" data-action="submitfork" data-from="'+fromSceneId+'">Create branch</button>'+
+      '<button class="action" data-action="cancelfork">Cancel</button>'+
+    '</div>'+
+  '</div>';
+  box.querySelector('[data-action="submitfork"]').addEventListener('click',()=>{
+    const title=document.getElementById('nb-title').value||'Untitled branch';
+    const number=document.getElementById('nb-number').value;
+    const sctitle=document.getElementById('nb-sctitle').value||'New branch scene';
+    const result=forkBranch({fromSceneId,title,firstNumber:number,firstTitle:sctitle});
+    selectedSceneId=result.scene.id; scheduleSave(); renderAll(); showToast('Created '+bssDisplayId(result.bss));
+  });
+  box.querySelector('[data-action="cancelfork"]').addEventListener('click',()=>{ box.innerHTML=''; });
+}
+
+/* ============================== COLLAPSE ============================== */
+function collapseAll(){ document.querySelectorAll('.card-body').forEach(b=>b.classList.add('collapsed')); document.querySelectorAll('.card-toggle').forEach(b=>b.textContent='▼'); requestAnimationFrame(()=>requestAnimationFrame(_drawLinesNow)); showToast('All collapsed'); }
+function expandAll(){ document.querySelectorAll('.card-body').forEach(b=>b.classList.remove('collapsed')); document.querySelectorAll('.card-toggle').forEach(b=>b.textContent='▲'); requestAnimationFrame(()=>requestAnimationFrame(_drawLinesNow)); showToast('All expanded'); }
+
+/* ============================== EXPORT / IMPORT ============================== */
+function exportData(){ const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='story-canvas-export.json'; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); showToast('Exported'); }
+function importData(evt){ const file=evt.target.files[0]; if(!file)return; const reader=new FileReader(); reader.onload=()=>{ try{ const parsed=JSON.parse(reader.result); if(!parsed.scenes||!parsed.branchSets)throw new Error(); state=parsed; selectedSceneId=null;picks=[];mode='none'; scheduleSave(); renderAll(); showToast('Imported'); }catch(e){alert('Invalid Story Canvas file.');} }; reader.readAsText(file); evt.target.value=''; }
+
+/* ============================== WRITER OVERLAY ============================== */
+let writerSceneId=null;
+
+function openWriter(sceneId){
+  const scene=state.scenes[sceneId]; if(!scene)return;
+  writerSceneId=sceneId;
+  document.getElementById('writerSceneLabel').textContent=sceneDisplayTitle(scene);
+  document.getElementById('writerSceneTitle').textContent=scene.title;
+  const ta=document.getElementById('writerTextarea');
+  ta.value=scene.desc||'';
+  updateWriterWordCount(ta.value);
+  const overlay=document.getElementById('writerOverlay');
+  overlay.classList.add('open');
+  requestAnimationFrame(()=>ta.focus());
+}
+
+function closeWriter(){
+  const overlay=document.getElementById('writerOverlay');
+  overlay.classList.remove('open');
+  if(writerSceneId){
+    const scene=state.scenes[writerSceneId];
+    if(scene){
+      scene.desc=document.getElementById('writerTextarea').value;
+      scheduleSave(); renderCards();
+      // refresh desc preview if panel is showing this scene
+      if(selectedSceneId===writerSceneId&&currentPanel==='scene') renderPanelContent();
+    }
+  }
+  writerSceneId=null;
+}
+
+function updateWriterWordCount(text){
+  const words=text.trim()===''?0:text.trim().split(/\s+/).length;
+  document.getElementById('writerWordCount').textContent=words+' word'+(words===1?'':'s');
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&document.getElementById('writerOverlay').classList.contains('open')){
+    closeWriter();
+  }
+});
+
+document.getElementById('writerTextarea').addEventListener('input',function(){
+  updateWriterWordCount(this.value);
+  if(writerSceneId){
+    const scene=state.scenes[writerSceneId];
+    if(scene){ scene.desc=this.value; scheduleSave(); }
+  }
+});
+
+/* ============================== BOOT ============================== */
+function renderAll(){ renderBranchStrip(); renderCards(); renderPanelContent(); renderModebar(); }
+window.addEventListener('resize',drawLines);
+document.getElementById('canvasOuter').addEventListener('scroll',_drawLinesNow);
+(async function init(){ await loadState(); renderAll(); })();
+</script>
+
+<script>
+// ── SERVICE WORKER REGISTRATION ──────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .catch(err => console.warn('SW registration failed:', err));
+  });
+}
+</script>
+</body>
+</html>
